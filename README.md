@@ -31,6 +31,18 @@ $ idf.py set-target esp32h2 build
 
 After flashing the Thread Border Router firmware to ESP32-S3, it will flash the RCP firmware to ESP32-H2 automatically.
 
+For the one-USB workflow, keep `CONFIG_AUTO_UPDATE_RCP=y`, prepare the S3 `rcp_fw` partition, and flash only the ESP32-S3 USB port:
+
+```
+$ cd /path/to/thread_border_router_apple_home_test
+$ ./tools/prepare_one_usb_flash.sh
+$ idf.py set-target esp32s3
+$ idf.py build
+$ idf.py -p <S3_USB_PORT> erase-flash flash monitor
+```
+
+The prepare script builds `esp-idf/examples/openthread/ot_rcp`, creates `rcp_fw/ot_rcp_0/rcp_image` and `rcp_fw/ot_rcp_1/rcp_image`, and the project CMake packs that directory into the `rcp_fw` SPIFFS partition. On boot, the S3 updates the H2 RCP through the board wiring.
+
 ### 1.3 Firmware for Host SoC
 
 The default setting flash size is 8MB, set target and build as below:
