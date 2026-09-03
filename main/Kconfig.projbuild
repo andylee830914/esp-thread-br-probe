@@ -1,0 +1,38 @@
+menu "ESP Thread Border Router Web"
+
+    config OPENTHREAD_BR_START_WEB
+        bool "Enable the official ESP Thread Border Router Web GUI and REST API"
+        select OPENTHREAD_COMMISSIONER
+        select OPENTHREAD_JOINER
+        default y
+        help
+            Start Espressif's esp_ot_br_server after the W5500 Ethernet
+            interface obtains an IP address.
+
+endmenu
+
+menu "Matter Accessory Identity"
+
+    config MATTER_VENDOR_NAME
+        string "Vendor name"
+        default "Espressif"
+        help
+            Basic Information VendorName shown to Matter controllers.
+            Matter limits this value to 32 characters.
+
+    config MATTER_PRODUCT_NAME
+        string "Product/model name"
+        default "Thread Border Router"
+        help
+            Basic Information ProductName shown to Matter controllers.
+            Matter limits this value to 32 characters.
+
+    config MATTER_ACCESSORY_NAME
+        string "Default accessory/node name"
+        default "Thread Border Router"
+        help
+            Initial Basic Information NodeLabel. Apple Home may let the user
+            replace this label during or after commissioning. Matter limits
+            this value to 32 characters.
+
+endmenu

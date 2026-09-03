@@ -51,6 +51,7 @@
 #include <setup_payload/QRCodeSetupPayloadGenerator.h>
 
 #include <inttypes.h>
+#include <atomic>
 #include <string.h>
 #include <openthread/dataset.h>
 #include <openthread/error.h>
@@ -84,11 +85,12 @@ esp_netif_t *s_ethernet_netif = nullptr;
 esp_eth_handle_t s_ethernet_handle = nullptr;
 esp_eth_netif_glue_handle_t s_ethernet_glue = nullptr;
 bool s_thread_br_initialized = false;
-bool s_w5500_start_requested = false;
+std::atomic_bool s_w5500_start_requested{false};
 bool s_ethernet_has_ip = false;
 bool s_operational_mdns_restart_scheduled = false;
 
 esp_err_t start_w5500_ethernet();
+esp_err_t request_w5500_ethernet_start(const char *reason);
 void init_thread_br_backbone(const char *if_key);
 void restart_operational_mdns(const char *reason);
 
@@ -334,7 +336,7 @@ void start_w5500_backbone_if_thread_ready(const char *reason)
 
     log_thread_addresses_and_srp(reason);
 
-    if (s_w5500_start_requested) {
+    if (s_w5500_start_requested.load()) {
         ESP_LOGI(TAG, "%s: W5500 start already requested", reason);
         if (s_ethernet_has_ip) {
             init_thread_br_backbone("ETH_DEF");
@@ -343,13 +345,7 @@ void start_w5500_backbone_if_thread_ready(const char *reason)
         }
         return;
     }
-    s_w5500_start_requested = true;
-
-    esp_err_t eth_err = start_w5500_ethernet();
-    if (eth_err != ESP_OK) {
-        s_w5500_start_requested = false;
-        ESP_LOGE(TAG, "W5500 Ethernet start failed: %s", esp_err_to_name(eth_err));
-    }
+    request_w5500_ethernet_start(reason);
 #endif
 }
 
@@ -545,6 +541,22 @@ esp_err_t start_w5500_ethernet()
     ESP_ERROR_CHECK(esp_eth_start(s_ethernet_handle));
 
     return ESP_OK;
+}
+
+esp_err_t request_w5500_ethernet_start(const char *reason)
+{
+    bool expected = false;
+    if (!s_w5500_start_requested.compare_exchange_strong(expected, true)) {
+        ESP_LOGI(TAG, "%s: W5500 start already requested", reason);
+        return ESP_OK;
+    }
+
+    esp_err_t err = start_w5500_ethernet();
+    if (err != ESP_OK) {
+        s_w5500_start_requested.store(false);
+        ESP_LOGE(TAG, "%s: W5500 Ethernet start failed: %s", reason, esp_err_to_name(err));
+    }
+    return err;
 }
 
 class LoggingThreadBorderRouterDelegate : public GenericOpenThreadBorderRouterDelegate {
@@ -774,12 +786,7 @@ extern "C" void app_main()
         if (probe_scan_err != ESP_OK) {
             ESP_LOGW(TAG, "Failed to start esp-thread-probe background scan: %s", esp_err_to_name(probe_scan_err));
         }
-        esp_err_t eth_err = start_w5500_ethernet();
-        if (eth_err != ESP_OK) {
-            ESP_LOGE(TAG, "W5500 Ethernet start failed: %s", esp_err_to_name(eth_err));
-        } else {
-            s_w5500_start_requested = true;
-        }
+        request_w5500_ethernet_start("Matter started");
         print_apple_home_onboarding_payload();
         log_active_dataset_from_ot("Matter started");
         ESP_LOGI(TAG, "Matter started. W5500 management IP may come up now; BR init is deferred until Thread dataset is provisioned and attached.");

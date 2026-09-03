@@ -99,6 +99,12 @@ ThreadBorderRouterManagement.SetActiveDatasetRequest received
 
 If that log appears, Apple Home attempted to send the active Thread dataset to the ESP Border Router. If commissioning completes but that log never appears, Apple Home accepted the Matter node but did not provision the Border Router dataset.
 
+### 2.1 Accessory identity
+
+Run `idf.py menuconfig` and open **Matter Accessory Identity** to configure the vendor name, product/model name, and default accessory/node name.
+
+Vendor ID and Product ID remain under Matter's **Device Identification Options**. Keep the test VID/PID aligned with the bundled example DAC; arbitrary production IDs require matching device-attestation certificates. Apple Home may replace the default node label with the name selected by the user during commissioning.
+
 ## 3. Official ESP Border Router Web UI and REST API
 
 The firmware includes Espressif's official `esp_ot_br_server` from the stable `esp-thread-br` v1.3 release. After W5500 obtains a DHCP address, open:
@@ -130,6 +136,9 @@ http://<W5500_IP>:8080/ipaddr
 http://<W5500_IP>:8080/leader
 http://<W5500_IP>:8080/dataset
 http://<W5500_IP>:8080/uplink
+http://<W5500_IP>:8080/matter/qr-code
 ```
 
 `/uplink` remains available for compatibility, but reports `transport: direct-http` because this integrated build does not use the probe's companion WROOM/UART proxy.
+
+`GET /matter/qr-code` returns the Matter QR payload, manual pairing code, and setup PIN as JSON. These values are commissioning secrets, so expose this test API only on a trusted network.
