@@ -9,4 +9,5 @@ ota_0,    app,  ota_0,   0x20000,   0x370000,
 ota_1,    app,  ota_1,   0x390000,  0x370000,
 rcp_fw,   data, spiffs,  0x700000,  0xA0000,
 fctry,    data, nvs,     0x7A0000,  0x6000
+web_storage,data,spiffs,  0x7A6000,  0x32000
 

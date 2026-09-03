@@ -98,3 +98,38 @@ ThreadBorderRouterManagement.SetActiveDatasetRequest received
 ```
 
 If that log appears, Apple Home attempted to send the active Thread dataset to the ESP Border Router. If commissioning completes but that log never appears, Apple Home accepted the Matter node but did not provision the Border Router dataset.
+
+## 3. Official ESP Border Router Web UI and REST API
+
+The firmware includes Espressif's official `esp_ot_br_server` from the stable `esp-thread-br` v1.3 release. After W5500 obtains a DHCP address, open:
+
+```text
+http://<W5500_IP>/
+```
+
+Useful REST endpoints include `GET /node`, `GET /diagnostics`, `GET /node/dataset/active`, `GET /get_properties`, and `GET /topology`.
+
+The Web UI files are built into the `web_storage` SPIFFS partition and are flashed automatically by `idf.py flash`.
+
+## 4. esp-thread-probe API
+
+The `esp-thread-probe` telemetry API runs directly against the Border Router's OpenThread instance on port `8080`. Keeping it on a separate port avoids collisions with the official server's `/topology` and `/ipaddr` handlers while preserving every original probe path:
+
+```text
+http://<W5500_IP>:8080/health
+http://<W5500_IP>:8080/info
+http://<W5500_IP>:8080/mesh
+http://<W5500_IP>:8080/neighbors
+http://<W5500_IP>:8080/routers
+http://<W5500_IP>:8080/children
+http://<W5500_IP>:8080/topology
+http://<W5500_IP>:8080/router-neighbors
+http://<W5500_IP>:8080/router-neighbors/scan
+http://<W5500_IP>:8080/router
+http://<W5500_IP>:8080/ipaddr
+http://<W5500_IP>:8080/leader
+http://<W5500_IP>:8080/dataset
+http://<W5500_IP>:8080/uplink
+```
+
+`/uplink` remains available for compatibility, but reports `transport: direct-http` because this integrated build does not use the probe's companion WROOM/UART proxy.

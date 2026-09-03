@@ -7,3 +7,13 @@ dependencies:
       - if: "idf_version >=5.0"
   espressif/w5500:
     version: "^2.0.0"
+  esp_ot_br_server:
+    git: https://github.com/espressif/esp-thread-br.git
+    path: components/esp_ot_br_server
+    version: 446b44d6449f91e62d7c96f959bb2c12cee544d4
+  protocol_examples_common:
+    path: ${IDF_PATH}/examples/common_components/protocol_examples_common
+  probe_core:
+    git: https://github.com/andylee830914/esp-thread-probe.git
+    path: components/probe_core
+    version: 41deaf92c7f250d62afe3bf3cc7c8ccf2be845bf

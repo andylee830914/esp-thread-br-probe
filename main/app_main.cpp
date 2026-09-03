@@ -12,6 +12,7 @@
 #include <esp_openthread.h>
 #include <esp_openthread_lock.h>
 #include <esp_openthread_border_router.h>
+#include <esp_br_web.h>
 #include <esp_spiffs.h>
 #include <esp_eth.h>
 #include <esp_eth_mac_w5500.h>
@@ -29,6 +30,8 @@
 #include <esp_matter_feature.h>
 
 #include <esp_ot_config.h>
+#include <probe_http.h>
+#include <probe_thread.h>
 
 #if CHIP_DEVICE_CONFIG_ENABLE_THREAD && defined(CONFIG_OPENTHREAD_BORDER_ROUTER) && defined(CONFIG_AUTO_UPDATE_RCP)
 #include <esp_ot_rcp_update.h>
@@ -48,6 +51,7 @@
 #include <setup_payload/QRCodeSetupPayloadGenerator.h>
 
 #include <inttypes.h>
+#include <string.h>
 #include <openthread/dataset.h>
 #include <openthread/error.h>
 #include <openthread/ip6.h>
@@ -83,7 +87,6 @@ bool s_thread_br_initialized = false;
 bool s_w5500_start_requested = false;
 bool s_ethernet_has_ip = false;
 bool s_operational_mdns_restart_scheduled = false;
-bool s_commissioning_complete = false;
 
 esp_err_t start_w5500_ethernet();
 void init_thread_br_backbone(const char *if_key);
@@ -318,21 +321,18 @@ void start_w5500_backbone_if_thread_ready(const char *reason)
     otDeviceRole role = current_thread_role();
     bool has_dataset = log_active_dataset_from_ot(reason);
     bool attached = role == OT_DEVICE_ROLE_CHILD || role == OT_DEVICE_ROLE_ROUTER || role == OT_DEVICE_ROLE_LEADER;
-    ESP_LOGI(TAG, "%s: Thread role=%s attached=%d dataset=%d",
-             reason, thread_role_to_str(role), attached, has_dataset);
+    unsigned fabric_count = chip::Server::GetInstance().GetFabricTable().FabricCount();
+    bool has_fabric = fabric_count > 0;
+    ESP_LOGI(TAG, "%s: BR eligibility: fabric_count=%u dataset=%d thread_attached=%d thread_role=%s ethernet_ip=%d",
+             reason, fabric_count, has_dataset, attached, thread_role_to_str(role), s_ethernet_has_ip);
 
-    if (!has_dataset || !attached) {
-        ESP_LOGI(TAG, "%s: W5500/BR backbone deferred until Thread is provisioned and attached", reason);
+    if (!has_fabric || !has_dataset || !attached) {
+        ESP_LOGI(TAG, "%s: BR backbone deferred until a Matter fabric, Thread dataset, and Thread attachment exist",
+                 reason);
         return;
     }
 
     log_thread_addresses_and_srp(reason);
-
-    if (!s_commissioning_complete) {
-        ESP_LOGI(TAG, "%s: Thread is ready; Matter server will advertise operational DNS-SD when ready", reason);
-        ESP_LOGI(TAG, "%s: BR backbone deferred until Matter CommissioningComplete", reason);
-        return;
-    }
 
     if (s_w5500_start_requested) {
         ESP_LOGI(TAG, "%s: W5500 start already requested", reason);
@@ -384,6 +384,7 @@ void print_apple_home_onboarding_payload()
     ESP_LOGI(TAG, "Manual pairing code: %s", manual_code.data());
     ESP_LOGI(TAG, "QR payload: %s", qr_code.data());
     ESP_LOGI(TAG, "Scan the QR payload as a standard Matter QR code in Apple Home.");
+    probe_http_set_matter_onboarding(qr_code.data(), manual_code.data(), payload.setUpPINCode);
     PrintQrCodeURL(qr_code);
     ESP_LOGI(TAG, "==================================================");
 }
@@ -402,14 +403,16 @@ void init_thread_br_backbone(const char *if_key)
         return;
     }
 
-    ESP_LOGI(TAG, "Initializing Thread Border Router backbone on %s", if_key);
+    ESP_LOGI(TAG, "Starting OpenThread Border Router on %s; backbone_netif=%p", if_key, backbone_netif);
     esp_openthread_set_backbone_netif(backbone_netif);
+    ESP_LOGI(TAG, "Configured OpenThread backbone netif=%p", esp_openthread_get_backbone_netif());
     esp_openthread_lock_acquire(portMAX_DELAY);
     esp_err_t err = esp_openthread_border_router_init();
     esp_openthread_lock_release();
+    ESP_LOGI(TAG, "esp_openthread_border_router_init() -> %s", esp_err_to_name(err));
     if (err == ESP_OK || err == ESP_ERR_INVALID_STATE) {
-        ESP_LOGI(TAG, "Thread Border Router backbone init result: %s", esp_err_to_name(err));
         s_thread_br_initialized = true;
+        ESP_LOGI(TAG, "BR initialized; backbone_netif=%p", esp_openthread_get_backbone_netif());
         restart_operational_mdns("Thread Border Router backbone ready");
     } else {
         ESP_LOGE(TAG, "Thread Border Router backbone init failed: %s", esp_err_to_name(err));
@@ -446,16 +449,20 @@ void on_ethernet_got_ip(void *, esp_event_base_t, int32_t, void *event_data)
     s_ethernet_has_ip = true;
     ESP_LOGI(TAG, "Ethernet got DHCP IPv4: " IPSTR ", gateway: " IPSTR ", netmask: " IPSTR,
              IP2STR(&event->ip_info.ip), IP2STR(&event->ip_info.gw), IP2STR(&event->ip_info.netmask));
+    esp_err_t probe_http_err = probe_http_start();
+    if (probe_http_err != ESP_OK) {
+        ESP_LOGE(TAG, "Failed to start esp-thread-probe API: %s", esp_err_to_name(probe_http_err));
+    }
     otDeviceRole role = current_thread_role();
     bool has_dataset = log_active_dataset_from_ot("Ethernet got IP");
     bool attached = role == OT_DEVICE_ROLE_CHILD || role == OT_DEVICE_ROLE_ROUTER || role == OT_DEVICE_ROLE_LEADER;
-    if (has_dataset && attached && s_commissioning_complete) {
+    unsigned fabric_count = chip::Server::GetInstance().GetFabricTable().FabricCount();
+    ESP_LOGI(TAG, "Ethernet got IP: BR eligibility: fabric_count=%u dataset=%d thread_attached=%d thread_role=%s ethernet_ip=%d",
+             fabric_count, has_dataset, attached, thread_role_to_str(role), s_ethernet_has_ip);
+    if (fabric_count > 0 && has_dataset && attached) {
         init_thread_br_backbone("ETH_DEF");
-    } else if (has_dataset && attached) {
-        ESP_LOGI(TAG, "Ethernet is up for management UI; Matter server will advertise operational DNS-SD when ready");
-        ESP_LOGI(TAG, "Ethernet is up for management UI; BR init deferred until Matter CommissioningComplete");
     } else {
-        ESP_LOGI(TAG, "Ethernet is up for management UI; BR init deferred until Thread is provisioned and attached");
+        ESP_LOGI(TAG, "Ethernet is up for management UI; BR init deferred until a Matter fabric, Thread dataset, and Thread attachment exist");
     }
 }
 
@@ -611,7 +618,6 @@ static void app_event_cb(const ChipDeviceEvent *event, intptr_t arg)
         ESP_LOGI(TAG, "Interface IP Address changed");
         break;
     case chip::DeviceLayer::DeviceEventType::kCommissioningComplete:
-        s_commissioning_complete = true;
         ESP_LOGI(TAG, "Matter commissioning complete, fabrics=%u",
                  static_cast<unsigned>(chip::Server::GetInstance().GetFabricTable().FabricCount()));
         start_w5500_backbone_if_thread_ready("Matter commissioning complete");
@@ -689,6 +695,8 @@ extern "C" void app_main()
     // If there is no commissioner in the controller, we need a default node so that the controller can be commissioned
     // to a specific fabric.
     node::config_t node_config;
+    auto &basic_info = node_config.root_node.basic_information;
+    strlcpy(basic_info.node_label, CONFIG_MATTER_ACCESSORY_NAME, sizeof(basic_info.node_label));
     node_t *node = node::create(&node_config, NULL, NULL);
     if (!node) {
         ESP_LOGE(TAG, "Failed to create Matter node");
@@ -730,6 +738,17 @@ extern "C" void app_main()
     set_openthread_platform_config(&config);
 #endif // CHIP_DEVICE_CONFIG_ENABLE_THREAD
 
+#if CONFIG_OPENTHREAD_BR_START_WEB
+    esp_vfs_spiffs_conf_t web_server_conf = {
+        .base_path = "/spiffs", .partition_label = "web_storage", .max_files = 10, .format_if_mount_failed = false
+    };
+    err = esp_vfs_spiffs_register(&web_server_conf);
+    if (err != ESP_OK) {
+        ESP_LOGE(TAG, "Failed to mount Border Router Web UI storage: %s", esp_err_to_name(err));
+        return;
+    }
+#endif
+
     /* Matter start */
     err = esp_matter::start(app_event_cb);
     if (err != ESP_OK) {
@@ -737,26 +756,24 @@ extern "C" void app_main()
     }
 #if CHIP_DEVICE_CONFIG_ENABLE_THREAD && defined(CONFIG_OPENTHREAD_BORDER_ROUTER) && defined(CONFIG_AUTO_UPDATE_RCP)
     if (err == ESP_OK) {
-        ESP_LOGI(TAG, "Checking RCP firmware before Thread commissioning");
-        esp_matter::lock::ScopedChipStackLock lock(portMAX_DELAY);
-        using namespace chip::DeviceLayer;
-        bool thread_was_enabled = ThreadStackMgr().IsThreadEnabled();
-        if (thread_was_enabled) {
-            if (ThreadStackMgr().SetThreadEnabled(false) != CHIP_NO_ERROR) {
-                ESP_LOGE(TAG, "Failed to disable Thread before updating RCP");
-                return;
-            }
-        }
+        // The updater only reads the running RCP version when it matches the bundled image.
+        // Do not cycle Thread after Matter has restored its operational state: doing so tears
+        // down the interface underneath existing operational DNS-SD and UDP listeners.
+        ESP_LOGI(TAG, "Checking RCP firmware without cycling the active Thread interface");
         esp_ot_update_rcp_if_different();
-        if (thread_was_enabled) {
-            if (ThreadStackMgr().SetThreadEnabled(true) != CHIP_NO_ERROR) {
-                ESP_LOGE(TAG, "Failed to enable Thread after updating RCP");
-                return;
-            }
-        }
     }
 #endif
     if (err == ESP_OK) {
+#if CONFIG_OPENTHREAD_BR_START_WEB
+        esp_br_web_start(const_cast<char *>("/spiffs"));
+        ESP_LOGI(TAG, "Official ESP Border Router Web UI/REST server armed; it will start when W5500 gets an IP");
+#endif
+        // Keep probe warnings/errors, but suppress its periodic router scan progress output.
+        esp_log_level_set("probe_thread", ESP_LOG_WARN);
+        esp_err_t probe_scan_err = probe_thread_start_background_scan();
+        if (probe_scan_err != ESP_OK) {
+            ESP_LOGW(TAG, "Failed to start esp-thread-probe background scan: %s", esp_err_to_name(probe_scan_err));
+        }
         esp_err_t eth_err = start_w5500_ethernet();
         if (eth_err != ESP_OK) {
             ESP_LOGE(TAG, "W5500 Ethernet start failed: %s", esp_err_to_name(eth_err));
