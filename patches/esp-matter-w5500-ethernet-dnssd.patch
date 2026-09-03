@@ -1,0 +1,32 @@
+*** managed_components/espressif__esp_matter/CMakeLists.txt.orig
+--- managed_components/espressif__esp_matter/CMakeLists.txt
+***************
+*** 439,445 ****
+          list(APPEND EXCLUDE_SRCS_LIST "${MATTER_SDK_PATH}/src/platform/ESP32/DnssdImpl.cpp")
+      endif()
+  
+!     if((CONFIG_USE_MINIMAL_MDNS) OR ((NOT CONFIG_ENABLE_WIFI_STATION) AND (NOT CONFIG_ENABLE_WIFI_AP)))
+          list(APPEND EXCLUDE_SRCS_LIST "${MATTER_SDK_PATH}/src/platform/ESP32/ESP32DnssdImpl.cpp")
+      endif()
+  
+--- 439,445 ----
+          list(APPEND EXCLUDE_SRCS_LIST "${MATTER_SDK_PATH}/src/platform/ESP32/DnssdImpl.cpp")
+      endif()
+  
+!     if((CONFIG_USE_MINIMAL_MDNS) OR ((NOT CONFIG_ENABLE_WIFI_STATION) AND (NOT CONFIG_ENABLE_WIFI_AP) AND (NOT CONFIG_ENABLE_ETHERNET_TELEMETRY)))
+          list(APPEND EXCLUDE_SRCS_LIST "${MATTER_SDK_PATH}/src/platform/ESP32/ESP32DnssdImpl.cpp")
+      endif()
+  
+***************
+*** 476,481 ****
+--- 476,485 ----
+                                        "${MATTER_SDK_PATH}/src/platform/ESP32/NetworkCommissioningDriver_Ethernet.cpp")
+      endif()
+  
++     if(NOT CONFIG_ETHERNET_NETWORK_COMMISSIONING_DRIVER)
++         list(APPEND EXCLUDE_SRCS_LIST "${MATTER_SDK_PATH}/src/platform/ESP32/NetworkCommissioningDriver_Ethernet.cpp")
++     endif()
++ 
+      if((NOT CONFIG_OPENTHREAD_ENABLED) OR (NOT CONFIG_ENABLE_MATTER_OVER_THREAD))
+          list(APPEND EXCLUDE_SRCS_LIST "${MATTER_SDK_PATH}/src/platform/ESP32/OpenthreadLauncher.cpp"
+                                        "${MATTER_SDK_PATH}/src/platform/ESP32/OpenthreadLauncher_LwIP.cpp"

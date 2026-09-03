@@ -1,0 +1,86 @@
+--- managed_components/espressif__esp_matter/connectedhomeip/connectedhomeip/src/app/clusters/operational-credentials-server/OperationalCredentialsCluster.cpp
++++ managed_components/espressif__esp_matter/connectedhomeip/connectedhomeip/src/app/clusters/operational-credentials-server/OperationalCredentialsCluster.cpp
+@@ -532,7 +532,14 @@
+     err = dnssdServer.AdvertiseOperational();
+     if (err != CHIP_NO_ERROR)
+     {
+-        ChipLogError(AppServer, "Operational advertising failed: %" CHIP_ERROR_FORMAT, err.Format());
++        if (err == CHIP_ERROR_INCORRECT_STATE)
++        {
++            ChipLogProgress(AppServer, "Operational advertising deferred until DNS-SD advertiser is initialized");
++        }
++        else
++        {
++            ChipLogError(AppServer, "Operational advertising failed: %" CHIP_ERROR_FORMAT, err.Format());
++        }
+     }
+ 
+     reportChange = true;
+--- managed_components/espressif__esp_matter/connectedhomeip/connectedhomeip/src/app/server/CommissioningWindowManager.cpp
++++ managed_components/espressif__esp_matter/connectedhomeip/connectedhomeip/src/app/server/CommissioningWindowManager.cpp
+@@ -46,7 +46,11 @@
+ // As per specifications (Section 5.5: Commissioning Flows), Upon completion of PASE session establishment, the Commissionee SHALL
+ // autonomously arm the Fail-safe timer for a timeout of 60 seconds.
+ constexpr Seconds16 kFailSafeTimeoutPostPaseCompletion(60);
++constexpr Milliseconds32 kOperationalAdvertisementRetryDelay(250);
++constexpr uint8_t kMaxOperationalAdvertisementRetries = 20;
+ 
++uint8_t gOperationalAdvertisementRetries = 0;
++
+ void HandleSessionEstablishmentTimeout(chip::System::Layer * aSystemLayer, void * aAppState)
+ {
+     chip::CommissioningWindowManager * commissionMgr = static_cast<chip::CommissioningWindowManager *>(aAppState);
+@@ -57,6 +61,36 @@
+ {
+     chip::CommissioningWindowManager * commissionMgr = reinterpret_cast<chip::CommissioningWindowManager *>(arg);
+     commissionMgr->OnPlatformEvent(event);
++}
++
++void TryAdvertiseOperational()
++{
++    CHIP_ERROR err = chip::app::DnssdServer::Instance().AdvertiseOperational();
++    if (err == CHIP_NO_ERROR)
++    {
++        gOperationalAdvertisementRetries = 0;
++        ChipLogProgress(AppServer, "Operational advertising enabled");
++        return;
++    }
++
++    if (err == CHIP_ERROR_INCORRECT_STATE && gOperationalAdvertisementRetries < kMaxOperationalAdvertisementRetries)
++    {
++        gOperationalAdvertisementRetries++;
++        ChipLogProgress(AppServer, "Operational advertising deferred until DNS-SD advertiser is initialized");
++        CHIP_ERROR timerErr = chip::DeviceLayer::SystemLayer().StartTimer(kOperationalAdvertisementRetryDelay,
++                                                                          [](chip::System::Layer *, void *) {
++                                                                              TryAdvertiseOperational();
++                                                                          },
++                                                                          nullptr);
++        if (timerErr != CHIP_NO_ERROR)
++        {
++            ChipLogError(AppServer, "Operational advertising retry timer failed: %" CHIP_ERROR_FORMAT, timerErr.Format());
++        }
++        return;
++    }
++
++    gOperationalAdvertisementRetries = 0;
++    ChipLogError(AppServer, "Operational advertising failed: %" CHIP_ERROR_FORMAT, err.Format());
+ }
+ } // namespace
+ 
+@@ -92,15 +126,7 @@
+     }
+     else if (event->Type == DeviceLayer::DeviceEventType::kOperationalNetworkEnabled)
+     {
+-        CHIP_ERROR err = app::DnssdServer::Instance().AdvertiseOperational();
+-        if (err != CHIP_NO_ERROR)
+-        {
+-            ChipLogError(AppServer, "Operational advertising failed: %" CHIP_ERROR_FORMAT, err.Format());
+-        }
+-        else
+-        {
+-            ChipLogProgress(AppServer, "Operational advertising enabled");
+-        }
++        TryAdvertiseOperational();
+     }
+ #if CONFIG_NETWORK_LAYER_BLE
+     else if (event->Type == DeviceLayer::DeviceEventType::kCloseAllBleConnections)

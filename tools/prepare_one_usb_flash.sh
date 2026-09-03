@@ -15,26 +15,23 @@ if [[ ! -d "${RCP_PROJECT_DIR}" ]]; then
     exit 1
 fi
 
+IDF_PY="${IDF_PATH}/tools/idf.py"
+if [[ ! -f "${IDF_PY}" ]]; then
+    echo "idf.py not found: ${IDF_PY}" >&2
+    exit 1
+fi
+
 echo "Building ESP32-H2 ot_rcp from: ${RCP_PROJECT_DIR}"
 (
     cd "${RCP_PROJECT_DIR}"
-    idf.py set-target esp32h2
-    idf.py build
+    python3 "${IDF_PY}" set-target esp32h2
+    python3 "${IDF_PY}" build
 )
 
-echo "Generating RCP update image from: ${RCP_BUILD_DIR}"
-rm -rf "${PROJECT_DIR}/rcp_fw"
-mkdir -p "${PROJECT_DIR}/rcp_fw/ot_rcp_0" "${PROJECT_DIR}/rcp_fw/ot_rcp_1"
-
-python3 "${PROJECT_DIR}/tools/create_rcp_image.py" \
-    --rcp-build-dir "${RCP_BUILD_DIR}" \
-    --target-file "${PROJECT_DIR}/rcp_fw/ot_rcp_0/rcp_image"
-
-cp "${PROJECT_DIR}/rcp_fw/ot_rcp_0/rcp_image" "${PROJECT_DIR}/rcp_fw/ot_rcp_1/rcp_image"
-
-echo "Prepared:"
-echo "  ${PROJECT_DIR}/rcp_fw/ot_rcp_0/rcp_image"
-echo "  ${PROJECT_DIR}/rcp_fw/ot_rcp_1/rcp_image"
+echo "Prepared H2 RCP build directory:"
+echo "  ${RCP_BUILD_DIR}"
+echo
+echo "The managed esp_rcp_update component will pack this RCP build into the S3 rcp_fw partition during idf.py build."
 echo
 echo "Next:"
 echo "  cd ${PROJECT_DIR}"

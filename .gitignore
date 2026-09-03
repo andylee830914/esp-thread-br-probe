@@ -1,0 +1,9 @@
+build/
+managed_components/
+dependencies.lock
+sdkconfig
+sdkconfig.old
+rcp_fw/
+main/managed_components/
+**/__pycache__/
+*.pyc

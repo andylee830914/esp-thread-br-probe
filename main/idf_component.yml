@@ -1,5 +1,9 @@
-dependencies:  
+dependencies:
+  espressif/esp_matter:
+    version: "^1.5.0"
   espressif/esp_rcp_update:
-        version: "~1.6.0"
-        rules:
-            - if: "idf_version >=5.0"
+    version: "~1.6.0"
+    rules:
+      - if: "idf_version >=5.0"
+  espressif/w5500:
+    version: "^2.0.0"
