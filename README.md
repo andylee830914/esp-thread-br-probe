@@ -52,17 +52,19 @@ The build embeds the ESP32-H2 RCP image in the `rcp_fw` partition. On boot, the 
 
 To recover or debug the RCP independently, build and flash ESP-IDF's `examples/openthread/ot_rcp` directly to the ESP32-H2.
 
-## Required ESP Matter patch
+## ESP Matter patches
 
-On the first build, the Component Manager downloads dependencies into `managed_components/`. Apply the local W5500 Ethernet/mDNS patch after that directory exists:
+On the first build, the Component Manager downloads dependencies into `managed_components/`. Apply the operational-advertising patch after that directory exists:
 
 ```sh
-patch -p0 < patches/esp-matter-w5500-ethernet-dnssd.patch
+patch -p0 < patches/esp-matter-defer-operational-advertising.patch
 ```
 
-The patch enables Matter operational DNS-SD advertising over the W5500 interface while excluding the ESP Matter Ethernet commissioning driver that assumes the ESP32's internal EMAC.
+This patch is required for reliable commissioning with the current managed ESP Matter version. AddNOC and the `kOperationalNetworkEnabled` event can occur before the DNS-SD advertiser is ready. The patch treats `CHIP_ERROR_INCORRECT_STATE` as a temporary condition and retries operational advertisement for up to five seconds.
 
 If `patch` reports that the patch is reversed or was previously applied, do not apply it again.
+
+The repository also contains `esp-matter-w5500-ethernet-dnssd.patch`, but it is **not required by the current configuration**. Matter operational traffic uses Thread, while W5500 provides the Border Router backbone and HTTP management interface. Keep that patch only as an optional compatibility patch if Matter Ethernet telemetry and operational DNS-SD are later enabled on W5500. See `patches/README.md` for details.
 
 ## Matter commissioning and fake accessory
 
@@ -79,8 +81,6 @@ Use the QR payload with a compatible Matter controller. During commissioning, th
 The same Matter node exposes a fake On/Off Light endpoint. It provides a simple accessory target for validating Matter-over-Thread commissioning, discovery, CASE sessions, and On/Off commands without additional end-device hardware.
 
 Run `idf.py menuconfig` and open **Matter Accessory Identity** to configure the vendor name, product/model name, and default node name. Keep the test VID/PID aligned with the included development attestation credentials; production IDs require matching certificates.
-
-Apple Home-specific validation notes remain available in `APPLE_HOME_TEST.md`, but Apple Home is not required to use this project.
 
 ## Network startup
 
