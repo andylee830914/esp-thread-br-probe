@@ -1,87 +1,72 @@
-# Thread Border Router
+# ESP Thread Border Router Probe
 
-This example creates a Matter Thread Border Router device using the ESP Matter data model.
+`esp-thread-br-probe` is an ESP32-based Thread Border Router with built-in Thread network diagnostics. It combines a Matter-managed Thread Border Router, the `esp-thread-probe` telemetry API, Espressif's Border Router Web UI, and a fake Matter On/Off Light accessory in one firmware image.
 
+The project is based on Espressif's `esp-matter/examples/thread_border_router` and builds as a standalone ESP-IDF project through the ESP-IDF Component Manager. It does not require `ESP_MATTER_PATH`.
 
-This standalone copy uses the ESP-IDF Component Manager to download `espressif/esp_matter`, `espressif/esp_rcp_update`, and related dependencies during build. It does not require `ESP_MATTER_PATH`.
+## Features
 
-See the [docs](https://docs.espressif.com/projects/esp-matter/en/latest/esp32/developing.html) for more information about building and flashing the firmware.
+- OpenThread Border Router running on an ESP32-S3 host with an ESP32-H2 RCP
+- W5500 SPI Ethernet backbone with DHCP
+- Matter BLE commissioning and Thread network provisioning
+- Matter Thread Border Router Management cluster
+- Fake Matter-over-Thread On/Off Light accessory for commissioning and control tests
+- `esp-thread-probe` topology and telemetry REST API
+- Espressif's official Thread Border Router Web UI and REST API
+- Automatic ESP32-H2 RCP update from the ESP32-S3 firmware image
+- Serial logging for Matter commissioning, Thread datasets, roles, addresses, and lifecycle events
 
-## 1. Additional Environment Setup
+## Hardware
 
-### 1.1 Hardware Platform
+The target is the [ESP Thread Border Router board](https://github.com/espressif/esp-thread-br#esp-thread-border-router-board), containing:
 
-The [ESP Thread Border Router board](https://github.com/espressif/esp-thread-br?tab=readme-ov-file#esp-thread-border-router-board) which provides an integrated module of an ESP32-S3 and an ESP32-H2 is required for this example.
+- ESP32-S3 host
+- ESP32-H2 OpenThread Radio Co-Processor (RCP)
+- W5500 SPI Ethernet daughter board used as the Thread backbone interface
 
-### 1.2 Firmware for RCP
+The current W5500 pin configuration is defined in `main/app_main.cpp`.
 
-The [OpenThread RCP](https://github.com/espressif/esp-idf/tree/master/examples/openthread/ot_rcp) should be available for the ESP32-H2 side of the Border Router board.
+## Build and flash
 
-Use the one-USB workflow first. It builds the ESP-IDF `ot_rcp` example for ESP32-H2. During the later ESP32-S3 build, the managed `esp_rcp_update` component packs that H2 build output into the S3 `rcp_fw` partition:
+Activate ESP-IDF, then prepare the ESP32-H2 RCP image:
 
-```
-$ cd /Users/andylee/Work/thread_border_router_apple_home_test
-$ source "/Users/andylee/.espressif/tools/activate_idf_v6.0.2.sh"
-$ ./tools/prepare_one_usb_flash.sh
-$ idf.py set-target esp32s3
-$ idf.py build
-$ idf.py -p <S3_USB_PORT> erase-flash flash monitor
-```
-
-On boot, the S3 updates the H2 RCP through the board wiring.
-
-You can also flash the H2 directly as a recovery/debug path:
-
-
-```
-$ cd /path/to/esp-idf/examples/openthread/ot_rcp
-$ idf.py set-target esp32h2 build
-$ idf.py -p <port> erase-flash flash
+```sh
+source /path/to/esp-idf/export.sh
+./tools/prepare_one_usb_flash.sh
 ```
 
-Or you can flash the firmware of ESP32-H2 with [esp_rcp_update](https://github.com/espressif/esp-thread-br/tree/main/components/esp_rcp_update) after enabling `AUTO_UPDATE_RCP` in menuconfig:
+Configure and build the ESP32-S3 firmware:
 
-```
-$ cd /path/to/esp-idf/examples/openthread/ot_rcp
-$ idf.py set-target esp32h2 build
-```
-
-After flashing the Thread Border Router firmware to ESP32-S3, it will flash the RCP firmware to ESP32-H2 automatically.
-
-### 1.3 Firmware for Host SoC
-
-The default setting flash size is 8MB, set target and build as below:
-
-```
-$ idf.py set-target esp32s3
-$ idf.py build
+```sh
+idf.py set-target esp32s3
+idf.py build
 ```
 
-On the first build, ESP-IDF will create `managed_components/` and download the Matter dependencies declared in `main/idf_component.yml`.
+Flash and monitor through the ESP32-S3 USB port:
 
-After `managed_components/` exists, apply the local ESP Matter W5500 Ethernet/mDNS patch before building:
-
-```
-$ patch -p0 < patches/esp-matter-w5500-ethernet-dnssd.patch
+```sh
+idf.py -p <S3_USB_PORT> erase-flash flash monitor
 ```
 
-This patch is required for the Apple Home test build when Wi-Fi is disabled and the W5500 Ethernet daughter board is used as the Matter IP backbone. It keeps the ESP32 platform DNSSD backend enabled for Ethernet operational advertising, while excluding the ESP Matter Ethernet network commissioning driver that assumes internal ESP32 EMAC instead of SPI W5500.
+The build embeds the ESP32-H2 RCP image in the `rcp_fw` partition. On boot, the ESP32-S3 checks and updates the H2 over the board's internal wiring, so the normal workflow requires only the S3 USB connection.
 
-If the patch was already applied, `patch` may report `Reversed (or previously applied) patch detected`; do not apply it again.
+To recover or debug the RCP independently, build and flash ESP-IDF's `examples/openthread/ot_rcp` directly to the ESP32-H2.
 
-If a local `sdkconfig` already exists from an older run, confirm `CONFIG_ENABLE_OTA_REQUESTOR=n`. The Apple Home commissioning test does not need the OTA requestor, and keeping it disabled avoids an unnecessary dependency edge in the managed-component build.
+## Required ESP Matter patch
 
-## 2. Apple Home Commissioning Test
+On the first build, the Component Manager downloads dependencies into `managed_components/`. Apply the local W5500 Ethernet/mDNS patch after that directory exists:
 
-This test build is intended to check whether Apple Home will commission the ESP Thread Border Router over standard Matter BLE commissioning and then provision it through the Matter Thread Border Router Management cluster.
-
-Flash and monitor the ESP32-S3:
-
-```
-$ idf.py -p <S3_USB_PORT> erase-flash flash monitor
+```sh
+patch -p0 < patches/esp-matter-w5500-ethernet-dnssd.patch
 ```
 
-After boot, use the serial output to get the Matter setup information:
+The patch enables Matter operational DNS-SD advertising over the W5500 interface while excluding the ESP Matter Ethernet commissioning driver that assumes the ESP32's internal EMAC.
+
+If `patch` reports that the patch is reversed or was previously applied, do not apply it again.
+
+## Matter commissioning and fake accessory
+
+When the device has no Matter fabric, it advertises over BLE. The serial console prints:
 
 ```text
 Setup PIN: ...
@@ -89,56 +74,78 @@ Manual pairing code: ...
 QR payload: MT:...
 ```
 
-Generate or open a QR code from the printed `MT:` payload, then scan it in Apple Home.
+Use the QR payload with a compatible Matter controller. During commissioning, the controller can provision the Thread operational dataset through the Thread Border Router Management cluster.
 
-Watch the serial monitor for:
+The same Matter node exposes a fake On/Off Light endpoint. It provides a simple accessory target for validating Matter-over-Thread commissioning, discovery, CASE sessions, and On/Off commands without additional end-device hardware.
+
+Run `idf.py menuconfig` and open **Matter Accessory Identity** to configure the vendor name, product/model name, and default node name. Keep the test VID/PID aligned with the included development attestation credentials; production IDs require matching certificates.
+
+Apple Home-specific validation notes remain available in `APPLE_HOME_TEST.md`, but Apple Home is not required to use this project.
+
+## Network startup
+
+After Ethernet link-up and DHCP, the device initializes the W5500 management interface. The Thread Border Router backbone starts when the Thread dataset is provisioned and the OpenThread instance is ready.
+
+Typical serial messages include:
 
 ```text
-ThreadBorderRouterManagement.SetActiveDatasetRequest received
+Ethernet link connected
+Ethernet got DHCP IPv4: <ip>, gateway: <gateway>, netmask: <netmask>
+Starting OpenThread Border Router on ETH_DEF
+Matter commissioning complete
 ```
 
-If that log appears, Apple Home attempted to send the active Thread dataset to the ESP Border Router. If commissioning completes but that log never appears, Apple Home accepted the Matter node but did not provision the Border Router dataset.
+## Border Router Web UI
 
-### 2.1 Accessory identity
-
-Run `idf.py menuconfig` and open **Matter Accessory Identity** to configure the vendor name, product/model name, and default accessory/node name.
-
-Vendor ID and Product ID remain under Matter's **Device Identification Options**. Keep the test VID/PID aligned with the bundled example DAC; arbitrary production IDs require matching device-attestation certificates. Apple Home may replace the default node label with the name selected by the user during commissioning.
-
-## 3. Official ESP Border Router Web UI and REST API
-
-The firmware includes Espressif's official `esp_ot_br_server` from the stable `esp-thread-br` v1.3 release. After W5500 obtains a DHCP address, open:
+The firmware includes Espressif's `esp_ot_br_server`. After the W5500 obtains an address, open:
 
 ```text
 http://<W5500_IP>/
 ```
 
-Useful REST endpoints include `GET /node`, `GET /diagnostics`, `GET /node/dataset/active`, `GET /get_properties`, and `GET /topology`.
+Useful endpoints include:
 
-The Web UI files are built into the `web_storage` SPIFFS partition and are flashed automatically by `idf.py flash`.
+- `GET /node`
+- `GET /diagnostics`
+- `GET /node/dataset/active`
+- `GET /get_properties`
+- `GET /topology`
 
-## 4. esp-thread-probe API
+The Web UI is stored in the `web_storage` SPIFFS partition and is included by `idf.py flash`.
 
-The `esp-thread-probe` telemetry API runs directly against the Border Router's OpenThread instance on port `8080`. Keeping it on a separate port avoids collisions with the official server's `/topology` and `/ipaddr` handlers while preserving every original probe path:
+## Probe API
+
+The `esp-thread-probe`-compatible API reads directly from the Border Router's OpenThread instance and listens on port `8080`:
 
 ```text
-http://<W5500_IP>:8080/health
-http://<W5500_IP>:8080/info
-http://<W5500_IP>:8080/mesh
-http://<W5500_IP>:8080/neighbors
-http://<W5500_IP>:8080/routers
-http://<W5500_IP>:8080/children
-http://<W5500_IP>:8080/topology
-http://<W5500_IP>:8080/router-neighbors
-http://<W5500_IP>:8080/router-neighbors/scan
-http://<W5500_IP>:8080/router
-http://<W5500_IP>:8080/ipaddr
-http://<W5500_IP>:8080/leader
-http://<W5500_IP>:8080/dataset
-http://<W5500_IP>:8080/uplink
-http://<W5500_IP>:8080/matter/qr-code
+GET http://<W5500_IP>:8080/health
+GET http://<W5500_IP>:8080/info
+GET http://<W5500_IP>:8080/mesh
+GET http://<W5500_IP>:8080/neighbors
+GET http://<W5500_IP>:8080/routers
+GET http://<W5500_IP>:8080/children
+GET http://<W5500_IP>:8080/topology
+GET http://<W5500_IP>:8080/router-neighbors
+GET http://<W5500_IP>:8080/router-neighbors/scan
+GET http://<W5500_IP>:8080/router
+GET http://<W5500_IP>:8080/ipaddr
+GET http://<W5500_IP>:8080/leader
+GET http://<W5500_IP>:8080/dataset
+GET http://<W5500_IP>:8080/uplink
+GET http://<W5500_IP>:8080/matter/qr-code
 ```
 
-`/uplink` remains available for compatibility, but reports `transport: direct-http` because this integrated build does not use the probe's companion WROOM/UART proxy.
+`/uplink` reports `transport: direct-http` because this integrated firmware does not use the probe project's companion WROOM/UART proxy.
 
-`GET /matter/qr-code` returns the Matter QR payload, manual pairing code, and setup PIN as JSON. These values are commissioning secrets, so expose this test API only on a trusted network.
+`/matter/qr-code` returns the Matter QR payload, manual pairing code, and setup PIN. These are commissioning secrets; expose the API only on a trusted network.
+
+## Main dependencies
+
+- ESP-IDF
+- `espressif/esp_matter`
+- `espressif/esp_rcp_update`
+- `espressif/w5500`
+- Espressif `esp_ot_br_server`
+- `esp-thread-probe` `probe_core`
+
+Dependency versions and sources are declared in `main/idf_component.yml`.
