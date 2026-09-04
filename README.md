@@ -2,6 +2,8 @@
 
 `esp-thread-br-probe` is an ESP32-based Thread Border Router with built-in Thread network diagnostics. It combines a Matter-managed Thread Border Router, the [`esp-thread-probe`](https://github.com/andylee830914/esp-thread-probe) telemetry API, Espressif's Border Router Web UI, and a fake Matter On/Off Light accessory in one firmware image.
 
+This firmware is designed for Espressif's [ESP Thread Border Router Board](https://github.com/espressif/esp-thread-br#esp-thread-border-router-board).
+
 The project is based on Espressif's `esp-matter/examples/thread_border_router` and builds as a standalone ESP-IDF project through the ESP-IDF Component Manager. It does not require `ESP_MATTER_PATH`.
 
 ## Features
@@ -16,13 +18,17 @@ The project is based on Espressif's `esp-matter/examples/thread_border_router` a
 - Automatic ESP32-H2 RCP update from the ESP32-S3 firmware image
 - Serial logging for Matter commissioning, Thread datasets, roles, addresses, and lifecycle events
 
-## Hardware
+## Supported hardware
 
-The target is the [ESP Thread Border Router board](https://github.com/espressif/esp-thread-br#esp-thread-border-router-board), containing:
+### ESP Thread Border Router Board
 
-- ESP32-S3 host
-- ESP32-H2 OpenThread Radio Co-Processor (RCP)
-- W5500 SPI Ethernet daughter board used as the Thread backbone interface
+The primary target is Espressif's [ESP Thread Border Router Board](https://github.com/espressif/esp-thread-br#esp-thread-border-router-board). The board combines:
+
+- an ESP32-S3 host running Matter, the Border Router, Web UI, and Probe API
+- an ESP32-H2 running the OpenThread Radio Co-Processor (RCP) firmware
+- internal UART, boot, and reset wiring that lets the S3 update the H2 RCP
+
+This project additionally uses a W5500 SPI Ethernet daughter board as the infrastructure/backbone interface and to expose the Web UI and REST APIs. The W5500 is external to the main ESP Thread Border Router Board.
 
 The current W5500 pin configuration is defined in `main/app_main.cpp`.
 
