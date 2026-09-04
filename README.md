@@ -1,6 +1,6 @@
 # ESP Thread Border Router Probe
 
-`esp-thread-br-probe` is an ESP32-based Thread Border Router with built-in Thread network diagnostics. It combines a Matter-managed Thread Border Router, the `esp-thread-probe` telemetry API, Espressif's Border Router Web UI, and a fake Matter On/Off Light accessory in one firmware image.
+`esp-thread-br-probe` is an ESP32-based Thread Border Router with built-in Thread network diagnostics. It combines a Matter-managed Thread Border Router, the [`esp-thread-probe`](https://github.com/andylee830914/esp-thread-probe) telemetry API, Espressif's Border Router Web UI, and a fake Matter On/Off Light accessory in one firmware image.
 
 The project is based on Espressif's `esp-matter/examples/thread_border_router` and builds as a standalone ESP-IDF project through the ESP-IDF Component Manager. It does not require `ESP_MATTER_PATH`.
 
@@ -11,7 +11,7 @@ The project is based on Espressif's `esp-matter/examples/thread_border_router` a
 - Matter BLE commissioning and Thread network provisioning
 - Matter Thread Border Router Management cluster
 - Fake Matter-over-Thread On/Off Light accessory for commissioning and control tests
-- `esp-thread-probe` topology and telemetry REST API
+- [`esp-thread-probe`](https://github.com/andylee830914/esp-thread-probe) topology and telemetry REST API
 - Espressif's official Thread Border Router Web UI and REST API
 - Automatic ESP32-H2 RCP update from the ESP32-S3 firmware image
 - Serial logging for Matter commissioning, Thread datasets, roles, addresses, and lifecycle events
@@ -115,7 +115,7 @@ The Web UI is stored in the `web_storage` SPIFFS partition and is included by `i
 
 ## Probe API
 
-The `esp-thread-probe`-compatible API reads directly from the Border Router's OpenThread instance and listens on port `8080`:
+The [`esp-thread-probe`](https://github.com/andylee830914/esp-thread-probe)-compatible API reads directly from the Border Router's OpenThread instance and listens on port `8080`:
 
 ```text
 GET http://<W5500_IP>:8080/health
@@ -146,6 +146,6 @@ GET http://<W5500_IP>:8080/matter/qr-code
 - `espressif/esp_rcp_update`
 - `espressif/w5500`
 - Espressif `esp_ot_br_server`
-- `esp-thread-probe` `probe_core`
+- [`esp-thread-probe`](https://github.com/andylee830914/esp-thread-probe) `probe_core`
 
 Dependency versions and sources are declared in `main/idf_component.yml`.
